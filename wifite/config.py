@@ -126,6 +126,16 @@ class Configuration(object):
 
     @classmethod
     def get_monitor_mode_interface(cls):
+        from .tools.rfkill import Rfkill
+        # Clear any soft rfkill block before touching the card, so that bringing
+        # the interface up (monitor-mode switch, macchanger, airodump) never
+        # fails with "SIOCSIFFLAGS: Operation not possible due to RF-kill" --
+        # regardless of whether the card is fresh or already in monitor mode.
+        Rfkill.unblock_wifi()
+        if Rfkill.wifi_blocked().get('hard'):
+            Color.pl('{!} {O}wireless radio is {R}hard-blocked{O} '
+                     '(physical switch / BIOS); {W}enable it before continuing')
+
         if cls.interface is None:
             # Interface wasn't defined, select it!
             from .tools.airmon import Airmon
