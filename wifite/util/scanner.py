@@ -51,7 +51,10 @@ class Scanner(object):
                         if target.bssid in airodump.decloaked_bssids:
                             target.decloaked = True
 
-                    self.print_targets()
+                    # Cap the live list to the terminal height so it refreshes
+                    # in place instead of scrolling; the full list is shown on
+                    # Ctrl+C for selection.
+                    self.print_targets(max_targets=Scanner.max_display_targets())
 
                     target_count = len(self.targets)
                     client_count = sum(len(t.clients) for t in self.targets)
@@ -105,42 +108,51 @@ class Scanner(object):
         return False
 
 
-    def print_targets(self):
-        '''Prints targets selection menu (1 target per row).'''
+    def print_targets(self, max_targets=None):
+        '''Prints targets selection menu (1 target per row).
+
+        When `max_targets` is set (the live scan), only the strongest
+        `max_targets` targets are shown, with a "...N more" footer, so the list
+        refreshes in place instead of scrolling past the top of the terminal.
+        When it is None (final selection) every target is shown.
+        '''
         if len(self.targets) == 0:
             Color.p('\r')
             return
+
+        shown, hidden = Scanner._visible_targets(self.targets, max_targets)
+
+        # Variable rows printed below the header + separator: the target rows
+        # plus the optional "...N more" footer. Drives the in-place cursor math.
+        displayed_rows = len(shown) + (1 if hidden else 0)
 
         if self.previous_target_count > 0:
             # We need to 'overwrite' the previous list of targets.
             if Configuration.verbose <= 1:
                 # Don't clear screen buffer in verbose mode.
-                if self.previous_target_count > len(self.targets) or \
-                   Scanner.get_terminal_height() < self.previous_target_count + 3:
-                    # Either:
-                    # 1) We have less targets than before, so we can't overwrite the previous list
-                    # 2) The terminal can't display the targets without scrolling.
-                    # Clear the screen.
+                if self.previous_target_count > displayed_rows or \
+                   Scanner.get_terminal_height() < displayed_rows + 3:
+                    # Either we now print fewer rows than before (can't overwrite
+                    # the old ones) or the block won't fit; clear and reprint.
                     from ..util.process import Process
                     Process.call('clear')
                 else:
-                    # We can fit the targets in the terminal without scrolling
-                    # 'Move' cursor up so we will print over the previous list
+                    # Fits: move cursor up to print over the previous list.
                     Color.pl(Scanner.UP_CHAR * (3 + self.previous_target_count))
 
-        self.previous_target_count = len(self.targets)
+        self.previous_target_count = displayed_rows
 
-        # Overwrite the current line
-        Color.p('\r{W}{D}')
-
-        # First row: columns
-        Color.p('   NUM')
+        # First row: columns. Clear each line before (over)writing so stale,
+        # longer content from a previous refresh leaves no tail behind.
+        Color.clear_entire_line()
+        Color.p('{W}{D}   NUM')
         Color.p('                      ESSID')
         if Configuration.show_bssids:
             Color.p('              BSSID')
         Color.pl('   CH  ENCR  POWER  WPS?  CLIENT')
 
         # Second row: separator
+        Color.clear_entire_line()
         Color.p('   ---')
         Color.p('  -------------------------')
         if Configuration.show_bssids:
@@ -148,22 +160,49 @@ class Scanner(object):
         Color.pl('  ---  ----  -----  ----  ------{W}')
 
         # Remaining rows: targets
-        for idx, target in enumerate(self.targets, start=1):
+        for idx, target in enumerate(shown, start=1):
             Color.clear_entire_line()
             Color.p('   {G}%s  ' % str(idx).rjust(3))
             Color.pl(target.to_str(Configuration.show_bssids))
 
+        if hidden:
+            Color.clear_entire_line()
+            Color.pl('   {D}... and %d more '
+                     '(strongest shown; {O}Ctrl+C{D} to list & select all){W}' % hidden)
+
     @staticmethod
     def get_terminal_height():
-        import os
-        (rows, columns) = os.popen('stty size', 'r').read().split()
-        return int(rows)
+        import shutil
+        # shutil checks $LINES/$COLUMNS then the tty, with a safe fallback --
+        # more robust than parsing `stty size`, which throws when stdout isn't
+        # a tty (e.g. piped output).
+        return shutil.get_terminal_size(fallback=(80, 25)).lines
 
     @staticmethod
     def get_terminal_width():
-        import os
-        (rows, columns) = os.popen('stty size', 'r').read().split()
-        return int(columns)
+        import shutil
+        return shutil.get_terminal_size(fallback=(80, 25)).columns
+
+    @staticmethod
+    def max_display_targets():
+        '''
+        How many target rows the live scan list may show so the table refreshes
+        in place instead of scrolling. Reserves rows for the header, separator,
+        the "...N more" footer, the "Scanning..." status line and a small
+        margin.
+        '''
+        return max(1, Scanner.get_terminal_height() - 6)
+
+    @staticmethod
+    def _visible_targets(targets, max_targets):
+        '''
+        Apply the live-scan display cap. Returns (shown, hidden_count): the
+        first `max_targets` targets and how many were hidden. `max_targets` of
+        None (final selection) shows everything.
+        '''
+        if max_targets is not None and len(targets) > max_targets:
+            return targets[:max_targets], len(targets) - max_targets
+        return targets, 0
 
     def select_targets(self):
         '''
@@ -192,7 +231,12 @@ class Scanner(object):
         if Configuration.scan_time > 0:
             return self.targets
 
-        # Ask user for targets.
+        # Ask user for targets. The live scan showed only a terminal-capped
+        # list, so clear and reset the in-place state to print the full list
+        # once -- this avoids the stale-cursor double-print on Ctrl+C.
+        from ..util.process import Process
+        Process.call('clear')
+        self.previous_target_count = 0
         self.print_targets()
         Color.clear_entire_line()
 
