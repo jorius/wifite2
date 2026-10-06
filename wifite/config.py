@@ -140,8 +140,11 @@ class Configuration(object):
             # Interface wasn't defined, select it!
             from .tools.airmon import Airmon
             cls.interface = Airmon.ask()
-            if cls.random_mac:
-                Macchanger.random()
+
+        # Randomize the MAC regardless of how the interface was chosen, so
+        # `--random-mac` also applies when the interface is given with `-i`.
+        if cls.random_mac:
+            Macchanger.random()
 
     @classmethod
     def load_from_arguments(cls):
