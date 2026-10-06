@@ -74,9 +74,10 @@ class Color(object):
 
     @staticmethod
     def clear_entire_line():
-        import os
-        (rows, columns) = os.popen('stty size', 'r').read().split()
-        Color.p('\r' + (' ' * int(columns)) + '\r')
+        # ANSI "erase entire line" (CSI 2K): width-independent and robust. The
+        # old stty-based space padding threw when stdout wasn't a tty and left
+        # tails behind when the detected width was wrong.
+        Color.p('\r\033[2K')
 
 
     @staticmethod
