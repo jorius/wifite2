@@ -3,6 +3,8 @@
 
 from .dependency import Dependency
 
+import re
+
 
 class Iw(Dependency):
     '''
@@ -34,6 +36,24 @@ class Iw(Dependency):
         pid.wait()
 
         return pid.poll()
+
+    @classmethod
+    def get_regdomain(cls):
+        '''
+        Return the current wireless regulatory country code as reported by
+        `iw reg get` (e.g. 'US', 'CO'), or '00' for the unset/"world" domain.
+        Returns None if it can't be determined.
+        '''
+        from ..util.process import Process
+
+        (out, err) = Process.call('iw reg get')
+        return cls._parse_regdomain(out)
+
+    @staticmethod
+    def _parse_regdomain(output):
+        '''Parse the first `country XX:` line out of `iw reg get` output.'''
+        match = re.search(r'country\s+([A-Z0-9]{2}):', output or '')
+        return match.group(1) if match else None
 
     @classmethod
     def get_interfaces(cls, mode=None):

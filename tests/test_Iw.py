@@ -74,6 +74,18 @@ phy#0
     def test_empty_output(self):
         assert Iw._parse_iw_dev('') == [], 'Empty output must yield no interfaces'
 
+    def test_parse_regdomain_unset(self):
+        out = 'global\ncountry 00: DFS-UNSET\n\t(2402 - 2472 @ 40), (N/A, 20)\n'
+        assert Iw._parse_regdomain(out) == '00'
+
+    def test_parse_regdomain_country(self):
+        out = 'global\ncountry CO: DFS-FCC\n\t(5170 - 5250 @ 80), (N/A, 23)\n'
+        assert Iw._parse_regdomain(out) == 'CO'
+
+    def test_parse_regdomain_none(self):
+        assert Iw._parse_regdomain('no country here') is None
+        assert Iw._parse_regdomain('') is None
+
 
 if __name__ == '__main__':
     unittest.main()

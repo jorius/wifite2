@@ -40,6 +40,19 @@ class TestAirodump(unittest.TestCase):
         assert target.essid_len == 19, 'ESSID length shold be 19, but got %s' % target.essid_len
 
 
+    def test_band_args_default_is_dual_band(self):
+        # No channel, no --5ghz -> scan both 2.4 + 5GHz.
+        assert Airodump.channel_band_args(None, False) == ['--band', 'abg']
+
+    def test_band_args_five_ghz_only(self):
+        # -5 / --5ghz restricts to the 5GHz band.
+        assert Airodump.channel_band_args(None, True) == ['--band', 'a']
+
+    def test_band_args_fixed_channel_wins(self):
+        # An explicit channel overrides band selection.
+        assert Airodump.channel_band_args(6, False) == ['-c', '6']
+        assert Airodump.channel_band_args(36, True) == ['-c', '36']
+
     def getFile(self, filename):
         ''' Helper method to parse targets from filename '''
         import os, inspect
