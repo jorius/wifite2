@@ -136,6 +136,16 @@ class Configuration(object):
             Color.pl('{!} {O}wireless radio is {R}hard-blocked{O} '
                      '(physical switch / BIOS); {W}enable it before continuing')
 
+        # Warn when the regulatory domain is unset. Under country "00" the kernel
+        # marks nearly all 5GHz channels no-IR (receive-only), so the default
+        # dual-band scan still sees 5GHz APs but deauth/attacks there will fail.
+        from .tools.iw import Iw
+        if Iw.get_regdomain() in (None, '00'):
+            Color.pl('{!} {O}wireless {R}regulatory domain is not set{O} (country {R}00{O}):')
+            Color.pl('{!}   {O}5GHz {R}transmit is disabled{O}, so deauth/attacks on 5GHz '
+                     'will fail ({G}2.4GHz is unaffected{O})')
+            Color.pl('{!}   {O}set your real country to enable it, e.g. {C}iw reg set CO{W}')
+
         if cls.interface is None:
             # Interface wasn't defined, select it!
             from .tools.airmon import Airmon
@@ -208,7 +218,7 @@ class Configuration(object):
 
         if args.five_ghz == True:
             cls.five_ghz = True
-            Color.pl('{+} {C}option:{W} including {G}5Ghz networks{W} in scans')
+            Color.pl('{+} {C}option:{W} scanning the {G}5GHz band only{W}')
 
         if args.show_bssids == True:
             cls.show_bssids = True

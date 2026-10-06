@@ -68,7 +68,8 @@ class Arguments(object):
             '--5ghz',
             action='store_true',
             dest='five_ghz',
-            help=self._verbose('Include 5Ghz channels (default: {G}off{W})'))
+            help=self._verbose('Scan the {C}5GHz{W} band {C}only{W} '
+                '(default: {G}scan both 2.4 + 5GHz{W})'))
 
 
         glob.add_argument('-mac',

@@ -54,6 +54,21 @@ class Airodump(Dependency):
         self.delete_existing_files = delete_existing_files
 
 
+    @staticmethod
+    def channel_band_args(channel=None, five_ghz=False):
+        '''
+        airodump-ng channel/band arguments.
+
+        - A fixed channel (``-c``) wins when set.
+        - ``-5`` / ``--5ghz`` restricts the scan to the 5GHz band only.
+        - Otherwise scan dual-band by default: 2.4GHz (b/g) + 5GHz (a).
+        '''
+        if channel:
+            return ['-c', str(channel)]
+        if five_ghz:
+            return ['--band', 'a']
+        return ['--band', 'abg']
+
     def __enter__(self):
         '''
         Setting things up for this context.
@@ -73,8 +88,7 @@ class Airodump(Dependency):
             '-w', self.csv_file_prefix, # Output file prefix
             '--write-interval', '1' # Write every second
         ]
-        if self.channel:    command.extend(['-c', str(self.channel)])
-        elif self.five_ghz: command.extend(['--band', 'a'])
+        command.extend(Airodump.channel_band_args(self.channel, self.five_ghz))
 
         if self.encryption:   command.extend(['--enc', self.encryption])
         if self.wps:          command.extend(['--wps'])
