@@ -22,3 +22,22 @@ phy0    wlan0        iwlwifi        Intel Corporation Centrino Ultimate-N 6300 (
         mon_iface = Airmon._parse_airmon_start(stdout)
         assert mon_iface == 'wlan0mon', 'Expected monitor-mode interface to be "wlan0mon" but got "{}"'.format(mon_iface)
 
+    def test_is_bad_driver_rtw89_family(self):
+        # Realtek in-tree rtw89 family (e.g. built-in RTL8852BE) must use the
+        # manual type-switch path, not airmon-ng's monitor vif.
+        assert Airmon._is_bad_driver('rtw89_8852be') is True
+        assert Airmon._is_bad_driver('rtw89_8922ae') is True
+
+    def test_is_bad_driver_legacy_exact(self):
+        assert Airmon._is_bad_driver('rtl8821au') is True
+
+    def test_is_bad_driver_good_drivers(self):
+        # Well-behaved drivers go through airmon-ng as usual.
+        assert Airmon._is_bad_driver('iwlwifi') is False
+        assert Airmon._is_bad_driver('ath9k_htc') is False
+
+    def test_is_bad_driver_unknown(self):
+        # Missing/blank driver (undetectable) must not be treated as bad.
+        assert Airmon._is_bad_driver(None) is False
+        assert Airmon._is_bad_driver('') is False
+
