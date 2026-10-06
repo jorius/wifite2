@@ -58,8 +58,15 @@ class Airmon(Dependency):
     base_interface = None
     killed_network_manager = False
 
-    # Drivers that need to be manually put into monitor mode
+    # Drivers that need to be manually put into monitor mode: airmon-ng's
+    # monitor-vif approach does not work for them, so we switch the existing
+    # interface's type directly (via `iw`/`iwconfig`) instead.
     BAD_DRIVERS = ['rtl8821au']
+    # Driver-name prefixes handled the same way. Realtek's in-tree `rtw89`
+    # family (RTL8852AE/BE/CE, RTL8851BE, RTL8922AE, ...) supports monitor
+    # mode, but only as a type switch on the existing interface: it exposes
+    # no managed+monitor combination, so airmon-ng cannot add a monitor vif.
+    BAD_DRIVER_PREFIXES = ['rtw89']
     #see if_arp.h
     ARPHRD_ETHER = 1 #managed
     ARPHRD_IEEE80211_RADIOTAP = 803 #monitor
@@ -106,6 +113,36 @@ class Airmon(Dependency):
             interfaces.append(AirmonIface(phy, interface, driver, chipset))
 
         return interfaces
+
+    @classmethod
+    def _is_bad_driver(cls, driver):
+        '''
+        True if `driver` must be put into monitor mode manually (a type switch
+        on the existing interface) because airmon-ng's monitor vif does not
+        work for it. Matches both the exact BAD_DRIVERS list and the
+        BAD_DRIVER_PREFIXES (e.g. the whole `rtw89` family).
+        '''
+        if not driver:
+            return False
+        if driver in cls.BAD_DRIVERS:
+            return True
+        return any(driver.startswith(prefix) for prefix in cls.BAD_DRIVER_PREFIXES)
+
+    @staticmethod
+    def get_interface_driver(iface_name):
+        '''
+        Resolve the kernel driver backing `iface_name` via sysfs
+        (e.g. 'rtw89_8852be'). Returns None if it cannot be determined --
+        used when the interface is passed by name and we have no airmon-ng
+        driver column to consult.
+        '''
+        if not iface_name:
+            return None
+        driver_link = os.path.join('/sys/class/net', iface_name, 'device', 'driver')
+        try:
+            return os.path.basename(os.readlink(driver_link))
+        except OSError:
+            return None
 
     @staticmethod
     def start_bad_driver(iface):
@@ -166,18 +203,24 @@ class Airmon(Dependency):
             iface_name = iface
             driver = None
 
+        # When the interface is passed by name (e.g. `wifite -i wlan0`) we have
+        # no airmon-ng driver column; resolve it via sysfs so the "bad driver"
+        # handling below still applies.
+        if not driver:
+            driver = Airmon.get_interface_driver(iface_name)
+
         # Remember this as the 'base' interface.
         Airmon.base_interface = iface_name
 
         Color.p('{+} enabling {G}monitor mode{W} on {C}%s{W}... ' % iface_name)
 
-        airmon_output = Process(['airmon-ng', 'start', iface_name]).stdout()
-
-        enabled_iface = Airmon._parse_airmon_start(airmon_output)
-
-        if enabled_iface is None and driver in Airmon.BAD_DRIVERS:
+        if Airmon._is_bad_driver(driver):
+            # airmon-ng's monitor vif won't work here; switch type directly.
             Color.p('{O}"bad driver" detected{W} ')
             enabled_iface = Airmon.start_bad_driver(iface_name)
+        else:
+            airmon_output = Process(['airmon-ng', 'start', iface_name]).stdout()
+            enabled_iface = Airmon._parse_airmon_start(airmon_output)
 
         if enabled_iface is None:
             Color.pl('{R}failed{W}')
